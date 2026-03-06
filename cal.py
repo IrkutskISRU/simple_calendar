@@ -82,6 +82,7 @@ def delete_event(event_id):
         print(f"Событие {event_id} удалено.")
 
 def show_events():
+    os.system('clear')
     """Показывает события за ближайшие 48 часов, группируя по дням."""
     now = datetime.now()
     tomorrow = now + timedelta(hours=48)
