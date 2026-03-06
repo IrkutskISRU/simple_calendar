@@ -3,9 +3,11 @@ import argparse
 import json
 import os
 from datetime import datetime, timedelta
+from pathlib import Path
 
 # Файл для хранения событий
-DATA_FILE = "calendar_events.json"
+BASE_DIR = Path(__file__).resolve().parent
+DATA_FILE = BASE_DIR / "calendar_events.json"
 
 # Цвета ANSI для оформления
 COLORS = {
