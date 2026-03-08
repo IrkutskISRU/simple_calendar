@@ -121,7 +121,6 @@ def show_events():
     display_events = []
 
     for event in events:
-        print(event)
         try:
             event_dt = datetime.fromisoformat(event['datetime'])
             recurrence = event.get('recurrence')
@@ -208,6 +207,77 @@ def show_events():
     if not has_events:
         print(f"{COLORS['gray']}Нет событий в ближайшие 48 часов и недавних просроченных.{COLORS['reset']}")
 
+def show_all_events(days_limit=14):
+    os.system('clear')
+    print()
+
+    now = datetime.now()
+    end_period = now + timedelta(days=days_limit)  # 14 дней вперёд для повторяющихся
+
+    events = load_events()
+    display_events = []
+
+    for event in events:
+        try:
+            event_dt = datetime.fromisoformat(event['datetime'])
+            recurrence = event.get('recurrence')
+
+            if recurrence in ['daily', 'weekly']:
+                # Для ежедневных и еженедельных — только ближайшие 14 дней
+                recurring_dates = generate_recurring_dates(
+                    event_dt, recurrence, end_period
+                )
+                for date in recurring_dates:
+                    if date >= now:  # Только будущие события
+                        display_events.append({
+                            'datetime': date,
+                            'description': event['description'],
+                            'id': event['id'],
+                            'is_recurring': True,
+                            'recurrence_type': recurrence
+                })
+            else:
+                # Для годовых и разовых — все события, независимо от даты
+                if event_dt >= now:
+                    display_events.append({
+                        'datetime': event_dt,
+                        'description': event['description'],
+                        'id': event['id'],
+                        'is_recurring': False,
+                        'recurrence_type': None
+                    })
+
+        except (KeyError, ValueError) as e:
+            print(f"Ошибка обработки события {event.get('id', 'неизвестный ID')}: {e}")
+            continue
+
+    # Сортируем все события по времени
+    display_events.sort(key=lambda x: x['datetime'])
+
+    if not display_events:
+        print(f"{COLORS['gray']}Нет событий в календаре.{COLORS['reset']}")
+        return
+
+    section("ВСЕ СОБЫТИЯ")
+
+    current_year = None
+    for ev in display_events:
+        ev_year = ev['datetime'].year
+
+        # Выводим заголовок года, если он изменился
+        if ev_year != current_year:
+            current_year = ev_year
+            print(f"\n{COLORS['yellow']}{ev_year} ГОД{COLORS['reset']}")
+            print()
+
+        date_str = ev['datetime'].strftime("%d.%m %H:%M")
+        marker = "🔁" if ev['is_recurring'] else "•"
+        recurrence_info = f" ({ev['recurrence_type']})" if ev['is_recurring'] else ""
+
+        print(f"{COLORS['green']}{date_str}{COLORS['reset']} {marker}{recurrence_info}")
+        print(f"{COLORS['white']}{ev['description']}{COLORS['reset']}{COLORS['gray']} (ID: {ev['id']}){COLORS['reset']}")
+        print()  # Пустая строка между событиями
+
 
 def main():
     parser = argparse.ArgumentParser(description="Календарь событий")
@@ -225,6 +295,15 @@ def main():
     del_parser = subparsers.add_parser('del', help='Удалить событие')
     del_parser.add_argument('id', type=int, help='ID события')
 
+    all_parser = subparsers.add_parser('all', help='Показать все события')
+    all_parser.add_argument(
+        '--days',
+        type=int,
+        default=14,
+        help='Количество дней для показа повторяющихся событий (по умолчанию: 14)'
+    )
+
+
     subparsers.add_parser('show', help='Показать события за 48 часов')
 
     args = parser.parse_args()
@@ -236,6 +315,8 @@ def main():
         delete_event(args.id)
     elif args.command == 'show':
         show_events()
+    elif args.command == 'all':
+        show_all_events(args.days)
     else:
         parser.print_help()
 
