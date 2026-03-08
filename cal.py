@@ -18,6 +18,39 @@ COLORS = {
     'reset': '\033[0m'
 }
 
+def generate_recurring_dates(start_dt, recurrence_type, end_dt):
+    """Генерирует даты повторения в заданном диапазоне, начиная с ближайшего будущего."""
+    dates = []
+    current = start_dt
+
+    # Находим первое повторение в будущем или сегодня
+    while current < datetime.now() and current <= end_dt:
+        if recurrence_type == 'daily':
+            current += timedelta(days=1)
+        elif recurrence_type == 'weekly':
+            current += timedelta(weeks=1)
+        elif recurrence_type == 'yearly':
+            try:
+                current = current.replace(year=current.year + 1)
+            except ValueError:
+                # Обработка 29 февраля
+                current += timedelta(days=365)
+
+    # Генерируем все повторения в диапазоне
+    while current <= end_dt:
+        dates.append(current)
+        if recurrence_type == 'daily':
+            current += timedelta(days=1)
+        elif recurrence_type == 'weekly':
+            current += timedelta(weeks=1)
+        elif recurrence_type == 'yearly':
+            try:
+                current = current.replace(year=current.year + 1)
+            except ValueError:
+                current += timedelta(days=365)
+    return dates
+
+
 def section(title):
     """Выводит стилизованный заголовок с линиями по бокам."""
     total_width = 40
@@ -43,31 +76,37 @@ def save_events(events):
     with open(DATA_FILE, 'w', encoding='utf-8') as f:
         json.dump(events, f, ensure_ascii=False, indent=2)
 
-def add_event(date_time_str, description):
-    """Добавляет новое событие."""
+def add_event(date_time_str, description, recurrence_type=None):
+    """Добавляет новое событие с возможностью повторения."""
     try:
-        # Парсим дату и время
         event_datetime = datetime.strptime(date_time_str, "%d.%m %H:%M")
-        # Устанавливаем год — текущий или следующий (если дата уже прошла в этом году)
         current_year = datetime.now().year
         event_datetime = event_datetime.replace(year=current_year)
-        if event_datetime < datetime.now():
+
+        # Для повторяющихся событий не переносим на следующий год
+        # Ближайшее повторение будет рассчитано при отображении
+        if not recurrence_type and event_datetime < datetime.now():
+            # Для одноразовых событий переносим на следующий год, если прошло
             event_datetime = event_datetime.replace(year=current_year + 1)
 
         events = load_events()
-        # Находим следующий доступный ID
         next_id = max([e['id'] for e in events], default=0) + 1
 
         new_event = {
             'id': next_id,
             'datetime': event_datetime.isoformat(),
-            'description': description
+            'description': description,
+            'recurrence': recurrence_type
         }
         events.append(new_event)
         save_events(events)
         print(f"Событие добавлено с ID: {next_id}")
+        if recurrence_type:
+            print(f"Тип повторения: {recurrence_type}")
     except ValueError as e:
         print("Ошибка формата даты. Используйте формат: ДД.ММ ЧЧ:ММ")
+
+
 
 def delete_event(event_id):
     """Удаляет событие по ID."""
@@ -83,40 +122,56 @@ def delete_event(event_id):
 
 def show_events():
     os.system('clear')
-    """Показывает события за ближайшие 48 часов, группируя по дням."""
+    print()
     now = datetime.now()
-    tomorrow = now + timedelta(hours=48)
+    end_period = now + timedelta(hours=48)  # 48 часов вперёд
 
     events = load_events()
-    today_events = []
-    tomorrow_events = []
+    display_events = []
 
     for event in events:
         try:
             event_dt = datetime.fromisoformat(event['datetime'])
-            # Проверяем строго: событие должно быть не раньше сейчас И не позже чем через 24 часа
-            if now <= event_dt < tomorrow:
-                if event_dt.date() == now.date():
-                    today_events.append({
+            recurrence = event.get('recurrence')
+
+            if recurrence:
+                recurring_dates = generate_recurring_dates(
+                    event_dt, recurrence, end_period
+                )
+                for date in recurring_dates:
+                    if now <= date <= end_period:
+                        display_events.append({
+                            'datetime': date,
+                            'description': event['description'],
+                            'id': event['id'],
+                            'is_recurring': True
+                })
+            else:
+                # Для одноразовых событий — проверяем, что дата в будущем и в диапазоне
+                if event_dt >= now and event_dt <= end_period:
+                    display_events.append({
                         'datetime': event_dt,
                         'description': event['description'],
-                        'id': event['id']
-                    })
-                elif event_dt.date() == (now + timedelta(days=1)).date():
-                    tomorrow_events.append({
-                        'datetime': event_dt,
-                        'description': event['description'],
-                        'id': event['id']
-                    })
+                        'id': event['id'],
+                        'is_recurring': False
+            })
         except (KeyError, ValueError) as e:
             print(f"Ошибка обработки события {event.get('id', 'неизвестный ID')}: {e}")
             continue
 
-    # Сортируем события по времени
-    today_events.sort(key=lambda x: x['datetime'])
-    tomorrow_events.sort(key=lambda x: x['datetime'])
+    # Сортируем все события по времени
+    display_events.sort(key=lambda x: x['datetime'])
 
     has_events = False
+    today_events = []
+    tomorrow_events = []
+
+    for ev in display_events:
+        ev_date = ev['datetime'].date()
+        if ev_date == now.date():
+            today_events.append(ev)
+        elif ev_date == (now + timedelta(days=1)).date():
+            tomorrow_events.append(ev)
 
     # Выводим события «сегодня»
     if today_events:
@@ -124,7 +179,8 @@ def show_events():
         section("СЕГОДНЯ")
         for event in today_events:
             time_str = event['datetime'].strftime("%H:%M")
-            print(f"{time_str}")
+            marker = "🔁" if event['is_recurring'] else "•"
+            print(f"{time_str} {marker}")
             print(f"{COLORS['white']}{event['description']}{COLORS['reset']}{COLORS['gray']} (ID: {event['id']}){COLORS['reset']}")
             print()  # Пустая строка между событиями
 
@@ -134,42 +190,46 @@ def show_events():
         section("ЗАВТРА")
         for event in tomorrow_events:
             time_str = event['datetime'].strftime("%H:%M")
-            print(f"{time_str}")
+            marker = "🔁" if event['is_recurring'] else "•"
+            print(f"{time_str} {marker}")
             print(f"{COLORS['white']}{event['description']}{COLORS['reset']}{COLORS['gray']} (ID: {event['id']}){COLORS['reset']}")
             print()  # Пустая строка между событиями
 
-    # Если нет событий за 24 часа
     if not has_events:
-        print(f"{COLORS['gray']}Нет событий в ближайшие 24 часа.{COLORS['reset']}")
+        print(f"{COLORS['gray']}Нет событий в ближайшие 48 часов.{COLORS['reset']}")
+
+
 
 def main():
     parser = argparse.ArgumentParser(description="Календарь событий")
     subparsers = parser.add_subparsers(dest='command', help='Команды')
 
-    # Команда add — используем nargs='+' для описания
+    # Команда add
     add_parser = subparsers.add_parser('add', help='Добавить событие')
     add_parser.add_argument('datetime', help='Дата и время (формат: ДД.ММ ЧЧ:ММ)')
     add_parser.add_argument('description', nargs='+', help='Описание события')
+    add_parser.add_argument('--daily', action='store_const', const='daily', dest='recurrence', help='Ежедневное повторение')
+    add_parser.add_argument('--weekly', action='store_const', const='weekly', dest='recurrence', help='Еженедельное повторение')
+    add_parser.add_argument('--yearly', action='store_const', const='yearly', dest='recurrence', help='Ежегодное повторение')
 
-    # Команда del
+    # Остальные команды без изменений
     del_parser = subparsers.add_parser('del', help='Удалить событие')
     del_parser.add_argument('id', type=int, help='ID события')
 
-    # Команда show
-    subparsers.add_parser('show', help='Показать события за 24 часа')
+    subparsers.add_parser('show', help='Показать события за 48 часов')
 
     args = parser.parse_args()
 
     if args.command == 'add':
-        # Объединяем элементы описания в одну строку
         description = ' '.join(args.description)
-        add_event(args.datetime, description)
+        add_event(args.datetime, description, args.recurrence)
     elif args.command == 'del':
         delete_event(args.id)
     elif args.command == 'show':
         show_events()
     else:
         parser.print_help()
+
 
 if __name__ == '__main__':
     main()
