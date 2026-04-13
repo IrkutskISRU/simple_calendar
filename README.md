@@ -4,7 +4,7 @@ A lightweight command-line calendar for storing and viewing personal events.
 
 The app supports:
 - One-time events
-- Recurring events (`daily`, `weekly`, `yearly`)
+- Recurring events (`daily`, `weekdays`, `weekly`, `yearly`)
 - Quick 48-hour agenda view
 - Full upcoming events view
 - Local JSON storage (`calendar_events.json`)
@@ -32,12 +32,14 @@ Examples:
 ```bash
 python3 cal.py add "09.04 14:30" Team sync
 python3 cal.py add "10.04 08:00" Morning workout --daily
+python3 cal.py add "11.04 08:00" Morning workout --weekdays
 python3 cal.py add "12.04 19:00" Weekly planning --weekly
 python3 cal.py add "25.12 10:00" Christmas brunch --yearly
 ```
 
 Recurrence flags:
 - `--daily`
+- `--weekdays` (Monday-Friday only)
 - `--weekly`
 - `--yearly`
 
@@ -79,4 +81,4 @@ Each event includes:
 - `id`
 - `datetime` (ISO format)
 - `description`
-- `recurrence` (`daily`, `weekly`, `yearly`, or `null`)
+- `recurrence` (`daily`, `weekdays`, `weekly`, `yearly`, or `null`)

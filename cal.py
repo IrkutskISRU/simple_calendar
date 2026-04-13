@@ -26,17 +26,25 @@ def generate_recurring_dates(start_dt, recurrence_type, end_dt):
 
     # Generate all recurrences in range (including past dates)
     while current <= end_dt:
-        dates.append(current)
         if recurrence_type == 'daily':
+            dates.append(current)
+            current += timedelta(days=1)
+        elif recurrence_type == 'weekdays':
+            if current.weekday() < 5:  # Monday-Friday
+                dates.append(current)
             current += timedelta(days=1)
         elif recurrence_type == 'weekly':
+            dates.append(current)
             current += timedelta(weeks=1)
         elif recurrence_type == 'yearly':
+            dates.append(current)
             try:
                 current = current.replace(year=current.year + 1)
             except ValueError:
                 # Handle February 29
                 current += timedelta(days=365)
+        else:
+            break
 
     return dates
 
@@ -222,7 +230,7 @@ def show_all_events(days_limit=14):
             event_dt = datetime.fromisoformat(event['datetime'])
             recurrence = event.get('recurrence')
 
-            if recurrence in ['daily', 'weekly']:
+            if recurrence in ['daily', 'weekdays', 'weekly']:
                 # For daily and weekly, only upcoming N days
                 recurring_dates = generate_recurring_dates(
                     event_dt, recurrence, end_period
@@ -288,6 +296,7 @@ def main():
     add_parser.add_argument('datetime', help='Date and time (format: DD.MM HH:MM)')
     add_parser.add_argument('description', nargs='+', help='Event description')
     add_parser.add_argument('--daily', action='store_const', const='daily', dest='recurrence', help='Daily recurrence')
+    add_parser.add_argument('--weekdays', action='store_const', const='weekdays', dest='recurrence', help='Weekdays-only recurrence (Mon-Fri)')
     add_parser.add_argument('--weekly', action='store_const', const='weekly', dest='recurrence', help='Weekly recurrence')
     add_parser.add_argument('--yearly', action='store_const', const='yearly', dest='recurrence', help='Yearly recurrence')
 
